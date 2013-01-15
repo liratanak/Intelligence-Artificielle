@@ -1,0 +1,3 @@
+vendor\bin\doctrine-cli orm:convert-mapping annotation --from-database --namespace=IntelligenceArtificielle\Entity\ module\IntelligenceArtificielle\src --force
+vendor\bin\doctrine-cli orm:generate-entities --generate-annotations=true module\IntelligenceArtificielle\src
+vendor\bin\doctrine-cli orm:generate-proxies
