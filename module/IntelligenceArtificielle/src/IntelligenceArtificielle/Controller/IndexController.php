@@ -13,14 +13,95 @@ namespace IntelligenceArtificielle\Controller;
 use Zend\Mvc\Controller\AbstractActionController;
 use Zend\View\Model\ViewModel;
 use IntelligenceArtificielle\Entity\Regle;
+use Zend\Session\Container;
+use Zend\Session\SessionManager;
 
 class IndexController extends AbstractActionController {
 
+	private $currentDemandablesProposition = array();
+	private $sessionKey = 'answers';
+
 	public function indexAction() {
 		$baseDeRegle = $this->getArrayOfRegles();
+		$demandablesPropositions = $this->getAllDemandablePropositions($baseDeRegle);
+		$propositionToConclution = $this->getPropositionToConclution($baseDeRegle);
+		$terminalesPropositions = $this->getAllFaitTerminal($propositionToConclution);
 
-		$store = array();
+		$allDemandablesProposition = array();
+		foreach ($terminalesPropositions as $key => $value) {
+			$this->currentDemandablesProposition = array();
+			$this->getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle);
+			$allDemandablesProposition[$this->getKeyUniqueForArray($value)] = $this->currentDemandablesProposition;
+		}
 
+		$request = $this->getRequest();
+		if ($request->isPost()) {
+			$this->handleAnswer($request->getPost());
+		}
+		
+		$form = new \IntelligenceArtificielle\Form\QuestionForm();
+		$form->get('questionKey')->setValue("Question Key");
+
+		return new ViewModel(array(
+					'baseDeRegle' => $baseDeRegle,
+					'store' => $propositionToConclution,
+					'form' => $form,
+				));
+	}
+	
+	private function handleAnswer($data){
+		$ans = $this->getAnswers();
+		$ans[] = $data;
+		$this->setAnswers($ans);
+		var_dump($ans);
+	}
+
+	private function setAnswers($newAns) {
+		$session = $this->getSession();
+		$session->ans = $newAns;
+		return $session->ans;
+	}
+
+	private function getAnswers() {
+		$session = $this->getSession();
+		if (isset($session->ans)) {
+			return $session->ans;
+		}
+		return array();
+	}
+
+	private function getSession() {
+		return new Container($this->sessionKey);
+	}
+
+	private function getAllFaitTerminal($propositionToConclution) {
+		$terminalesPropositions = array();
+		foreach ($propositionToConclution as $key => $value) {
+			if (NULL === $value) {
+				$tmp = preg_split('/\|/', $key);
+				$terminalesPropositions [$key]['negative'] = $tmp[0];
+				$terminalesPropositions [$key]['verbe'] = $tmp[1];
+				$terminalesPropositions [$key]['proposition'] = $tmp[2];
+			}
+		}
+		return $terminalesPropositions;
+	}
+
+	private function getPropositionToConclution($baseDeRegle) {
+		$propositionToConclution = array();
+		foreach ($baseDeRegle as $regle) {
+			foreach ($regle['premisses'] as $premiss) {
+				$key = $this->getKeyUniqueForArray($premiss);
+				$propositionToConclution[$key][] = $regle['conclusion'];
+			}
+			$premiss = $regle['conclusion'];
+			$key = $this->getKeyUniqueForArray($premiss);
+			$propositionToConclution[$key] = NULL;
+		}
+		return $propositionToConclution;
+	}
+
+	private function getAllDemandablePropositions($baseDeRegle) {
 		$demandablesPropositions = array();
 		foreach ($baseDeRegle as $regle) {
 			$demandablesPropositions = array_merge($demandablesPropositions, $regle['premisses']);
@@ -34,14 +115,7 @@ class IndexController extends AbstractActionController {
 		}
 
 		foreach ($baseDeRegle as $regle) {
-			foreach ($regle['premisses'] as $premiss) {
-				$key = $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
-				$store[$key][] = $regle['conclusion'];
-			}
 			$premiss = $regle['conclusion'];
-			$key = $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
-			$store[$key] = NULL;
-
 			$key = $premiss['verbe'] . '|' . $premiss['proposition'];
 			if (isset($demandablesPropositions[$key])) {
 				unset($demandablesPropositions[$key]);
@@ -51,47 +125,25 @@ class IndexController extends AbstractActionController {
 		foreach ($demandablesPropositions as &$proposition) {
 			unset($proposition['negative']);
 		}
+		return $demandablesPropositions;
+	}
 
-		$terminalesPropositions = array();
-		foreach ($store as $key => $value) {
-			if (NULL === $value) {
-				$tmp = preg_split('/\|/', $key);
-				$terminalesPropositions [$key]['negative'] = $tmp[0];
-				$terminalesPropositions [$key]['verbe'] = $tmp[1];
-				$terminalesPropositions [$key]['proposition'] = $tmp[2];
+	private function getRandomNumber($start = 0, $end = 0) {
+		return rand($start, $end);
+	}
+
+	private function getAllQuestion($allDemandablesProposition) {
+		$questions = array();
+		foreach ($allDemandablesProposition as $aTerminal) {
+			foreach ($aTerminal as $premisses) {
+				$index = $this->getRandomNumber(0, (count($premisses['OR']) - 1));
+				foreach ($premisses['OR'][$index] as $eachDemandable) {
+					$questions[] = $this->getKeyUniqueForArray($eachDemandable);
+				}
 			}
 		}
-
-//		var_dump($terminalesPropositions);
-//		var_dump($demandablesPropositions);
-//		echo '<pre>';
-//		print_r($baseDeRegle);
-//		echo '</pre>';
-
-		foreach ($terminalesPropositions as $key => $value) {
-			$this->getFirstQuestion($value, $demandablesPropositions);
-			$this->currentDemandablesProposition = array();
-			$this->getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle);
-			var_dump($value);
-			var_dump($this->currentDemandablesProposition);
-//			die();
-		}
-
-		return new ViewModel(array(
-					'baseDeRegle' => $baseDeRegle,
-					'store' => $store,
-				));
+		return $questions;
 	}
-
-	private function getFirstQuestion($value, $demandablesPropositions) {
-		if (in_array($value, $demandablesPropositions)) {
-//			var_dump($value);
-		} else {
-//			var_dump('NOT DEMANDABLE');
-		}
-	}
-
-	private $currentDemandablesProposition = array();
 
 	private function getKeyUniqueForArray($premiss) {
 		return $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
@@ -106,28 +158,36 @@ class IndexController extends AbstractActionController {
 	 */
 	private function getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle) {
 		$deductiblesPropositions = $this->getAllPremesses($value, $baseDeRegle);
-		foreach ($deductiblesPropositions as $or) {
-			foreach ($or as $premiss) {
+		$currentKey = $this->getKeyUniqueForArray($value);
+		$tmpKey = 0;
+		foreach ($deductiblesPropositions as $premisses) {
+			foreach ($premisses as $premiss) {
 				if ($this->isDemandableProposition($premiss, $demandablesPropositions)) {
-					$currentKey = $this->getKeyUniqueForArray($value);
-					$tmpArray = array(
-						array(
-							$currentKey => $premiss,
-						)
-					);
-					if (array_key_exists($currentKey, $this->currentDemandablesProposition)) {
-						
+					if (isset($this->currentDemandablesProposition[$currentKey]['OR'])) {
+						foreach ($this->currentDemandablesProposition[$currentKey]['OR'] as $sub) {
+							foreach ($sub as $p) {
+								if ($p == $premiss)
+									return;
+							}
+						}
 					}
-					$this->currentDemandablesProposition = array_merge($this->currentDemandablesProposition, $tmpArray);
+					$this->currentDemandablesProposition[$currentKey]['OR'][$tmpKey][] = $premiss;
 				} else {
 					$this->getAllDemandablesPremisses($premiss, $demandablesPropositions, $baseDeRegle);
 				}
 			}
+			$tmpKey++;
 		}
 	}
 
 	private function getAllPremesses($value, $baseDeRegle) {
 		$premisses = array();
+		$negative = FALSE;
+		if (1 == $value['negative']) {
+			$negative = TRUE;
+			$value['negative'] = 0;
+		}
+
 		foreach ($baseDeRegle as $regle) {
 			if ($value == $regle['conclusion']) {
 				$premisses[] = $regle['premisses'];
