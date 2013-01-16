@@ -29,13 +29,6 @@ class Regle
     private $proposition;
 
     /**
-     * @var string
-     *
-     * @ORM\Column(name="verbe", type="string", length=64, nullable=true)
-     */
-    private $verbe;
-
-    /**
      * @var boolean
      *
      * @ORM\Column(name="negative", type="boolean", nullable=true)
@@ -43,18 +36,25 @@ class Regle
     private $negative;
 
     /**
+     * @var string
+     *
+     * @ORM\Column(name="verbe", type="string", length=64, nullable=true)
+     */
+    private $verbe;
+
+    /**
      * @var \Doctrine\Common\Collections\Collection
      *
      * @ORM\ManyToMany(targetEntity="IntelligenceArtificielle\Entity\Regle", mappedBy="conclusion")
      */
-    private $premisseOf;
+    private $premiss;
 
     /**
      * Constructor
      */
     public function __construct()
     {
-        $this->premisseOf = new \Doctrine\Common\Collections\ArrayCollection();
+        $this->premiss = new \Doctrine\Common\Collections\ArrayCollection();
     }
     
 }

@@ -19,29 +19,174 @@ class IndexController extends AbstractActionController {
 	public function indexAction() {
 		$baseDeRegle = $this->getArrayOfRegles();
 
+		$store = array();
+
+		$demandablesPropositions = array();
 		foreach ($baseDeRegle as $regle) {
-			$this->addPremiss($regle['conclusion']);
+			$demandablesPropositions = array_merge($demandablesPropositions, $regle['premisses']);
+		}
+
+		$demandablesPropositionsTmp = $demandablesPropositions;
+		$demandablesPropositions = array();
+		foreach ($demandablesPropositionsTmp as $value) {
+			$key = $value['verbe'] . '|' . $value['proposition'];
+			$demandablesPropositions[$key] = $value;
+		}
+
+		foreach ($baseDeRegle as $regle) {
 			foreach ($regle['premisses'] as $premiss) {
-				$this->addPremiss($premiss);
+				$key = $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
+				$store[$key][] = $regle['conclusion'];
+			}
+			$premiss = $regle['conclusion'];
+			$key = $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
+			$store[$key] = NULL;
+
+			$key = $premiss['verbe'] . '|' . $premiss['proposition'];
+			if (isset($demandablesPropositions[$key])) {
+				unset($demandablesPropositions[$key]);
 			}
 		}
 
+		foreach ($demandablesPropositions as &$proposition) {
+			unset($proposition['negative']);
+		}
+
+		$terminalesPropositions = array();
+		foreach ($store as $key => $value) {
+			if (NULL === $value) {
+				$tmp = preg_split('/\|/', $key);
+				$terminalesPropositions [$key]['negative'] = $tmp[0];
+				$terminalesPropositions [$key]['verbe'] = $tmp[1];
+				$terminalesPropositions [$key]['proposition'] = $tmp[2];
+			}
+		}
+
+//		var_dump($terminalesPropositions);
+//		var_dump($demandablesPropositions);
+//		echo '<pre>';
+//		print_r($baseDeRegle);
+//		echo '</pre>';
+
+		foreach ($terminalesPropositions as $key => $value) {
+			$this->getFirstQuestion($value, $demandablesPropositions);
+			$this->currentDemandablesProposition = array();
+			$this->getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle);
+			var_dump($value);
+			var_dump($this->currentDemandablesProposition);
+//			die();
+		}
 
 		return new ViewModel(array(
 					'baseDeRegle' => $baseDeRegle,
+					'store' => $store,
 				));
 	}
 
-	private function addPremiss($data) {
-		$regleEntity = new Regle();
-		$regleEntity->setProposition($data['proposition']);
-		$regleEntity->setVerbe($data['verbe']);
-		if (isset($data['negative'])) {
-			if (1 == $data['negative']) {
-				$regleEntity->setNegative(TRUE);
+	private function getFirstQuestion($value, $demandablesPropositions) {
+		if (in_array($value, $demandablesPropositions)) {
+//			var_dump($value);
+		} else {
+//			var_dump('NOT DEMANDABLE');
+		}
+	}
+
+	private $currentDemandablesProposition = array();
+
+	private function getKeyUniqueForArray($premiss) {
+		return $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
+	}
+
+	/**
+	 * 
+	 * @param type $value
+	 * @param type $demandablesPropositions
+	 * @param type $baseDeRegle
+	 * @return array
+	 */
+	private function getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle) {
+		$deductiblesPropositions = $this->getAllPremesses($value, $baseDeRegle);
+		foreach ($deductiblesPropositions as $or) {
+			foreach ($or as $premiss) {
+				if ($this->isDemandableProposition($premiss, $demandablesPropositions)) {
+					$currentKey = $this->getKeyUniqueForArray($value);
+					$tmpArray = array(
+						array(
+							$currentKey => $premiss,
+						)
+					);
+					if (array_key_exists($currentKey, $this->currentDemandablesProposition)) {
+						
+					}
+					$this->currentDemandablesProposition = array_merge($this->currentDemandablesProposition, $tmpArray);
+				} else {
+					$this->getAllDemandablesPremisses($premiss, $demandablesPropositions, $baseDeRegle);
+				}
 			}
 		}
-		$this->getEntityManager()->persist($regleEntity);
+	}
+
+	private function getAllPremesses($value, $baseDeRegle) {
+		$premisses = array();
+		foreach ($baseDeRegle as $regle) {
+			if ($value == $regle['conclusion']) {
+				$premisses[] = $regle['premisses'];
+			}
+		}
+		return $premisses;
+	}
+
+	private function isDemandableProposition($goal = array(), $demandablesPropositions = array()) {
+		unset($goal['negative']);
+		return in_array($goal, $demandablesPropositions);
+	}
+
+	/**
+	 * 
+	 * @param array $premiss
+	 * @return \IntelligenceArtificielle\Entity\Regle
+	 */
+	private function getPremissEntityObject($premiss) {
+		$existEntity = $this->getEntityManager()->getRepository('IntelligenceArtificielle\Entity\Regle')->findOneBy(array(
+			'proposition' => $premiss['proposition'],
+			'negative' => $premiss['negative'],
+			'verbe' => $premiss['verbe'],
+				));
+		return $existEntity;
+	}
+
+	private function isPremissNotExist($premiss) {
+		$regle = $this->getPremissEntityObject($premiss);
+		return is_null($regle);
+	}
+
+	/**
+	 * 
+	 * @param array $premiss
+	 * @return \IntelligenceArtificielle\Entity\Regle
+	 */
+	private function newRegleEntity($premiss) {
+		$regleEntity = new Regle();
+		$regleEntity->setProposition(($premiss['proposition']));
+		$regleEntity->setVerbe(($premiss['verbe']));
+		$regleEntity->setNegative($premiss['negative']);
+		return $regleEntity;
+	}
+
+	private function addPremiss($premiss = array(), $conclusion = FALSE) {
+		if (FALSE !== $conclusion) {
+			$newConclutionEntity = $this->newRegleEntity($conclusion);
+			$this->flushRegleToDb($newConclutionEntity);
+
+			$newPremissEntity = $this->newRegleEntity($premiss);
+			$newPremissEntity->addPremis($this->getPremissEntityObject($conclusion));
+			$this->flushRegleToDb($newPremissEntity);
+			die();
+		}
+	}
+
+	private function flushRegleToDb($entity) {
+		$this->getEntityManager()->persist($entity);
 		$this->getEntityManager()->flush();
 	}
 
@@ -60,7 +205,6 @@ class IndexController extends AbstractActionController {
 				$baseDeRegle[$regleKey]['premisses'] = preg_split('/ET/', $premissesEtConclution[0]);
 				$premissesArray = array();
 				foreach ($baseDeRegle[$regleKey]['premisses'] as $key => $premiss) {
-//					var_dump($premiss);
 					$premissesArray[$key] = $this->splitPremiss($premiss);
 				}
 				$baseDeRegle[$regleKey]['premisses'] = $premissesArray;
@@ -73,17 +217,18 @@ class IndexController extends AbstractActionController {
 	private function splitPremiss($premiss) {
 		$premissesArray = array();
 		$premiss = $this->replaceparentheses($premiss);
+		$premissesArray['negative'] = '0';
 		if (preg_match('/[ne|n\'](.*)pas(.*)/', $premiss)) {
 			$premiss = trim(preg_replace('/ne|n\'|pas/', '', $premiss));
-			$premissesArray['negative'] = TRUE;
+			$premissesArray['negative'] = '1';
 		}
 		$splitedPremiss = preg_split('/\ /', $premiss, 2);
 		if (isset($splitedPremiss[1])) {
-			$premissesArray['verbe'] = $splitedPremiss[0];
-			$premissesArray['proposition'] = $splitedPremiss[1];
+			$premissesArray['verbe'] = trim($splitedPremiss[0]);
+			$premissesArray['proposition'] = trim($splitedPremiss[1]);
 		} else {
 			$premissesArray['verbe'] = '';
-			$premissesArray['proposition'] = $splitedPremiss[0];
+			$premissesArray['proposition'] = trim($splitedPremiss[0]);
 		}
 		return $premissesArray;
 	}

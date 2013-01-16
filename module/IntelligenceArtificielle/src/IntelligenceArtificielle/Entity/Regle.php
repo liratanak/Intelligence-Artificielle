@@ -29,13 +29,6 @@ class Regle
     private $proposition;
 
     /**
-     * @var string
-     *
-     * @ORM\Column(name="verbe", type="string", length=64, nullable=true)
-     */
-    private $verbe;
-
-    /**
      * @var boolean
      *
      * @ORM\Column(name="negative", type="boolean", nullable=true)
@@ -43,18 +36,38 @@ class Regle
     private $negative;
 
     /**
+     * @var string
+     *
+     * @ORM\Column(name="verbe", type="string", length=64, nullable=true)
+     */
+    private $verbe;
+	/**
+	 * @var \Doctrine\Common\Collections\Collection
+	 *
+	 * @ORM\ManyToMany(targetEntity="IntelligenceArtificielle\Entity\Regle", inversedBy="regle")
+	 * @ORM\JoinTable(name="relations",
+	 *   joinColumns={
+	 *     @ORM\JoinColumn(name="conclusion", referencedColumnName="id")
+	 *   },
+	 *   inverseJoinColumns={
+	 *     @ORM\JoinColumn(name="premiss", referencedColumnName="role_id")
+	 *   }
+	 * )
+	 */
+	private $conclusion;
+    /**
      * @var \Doctrine\Common\Collections\Collection
      *
      * @ORM\ManyToMany(targetEntity="IntelligenceArtificielle\Entity\Regle", mappedBy="conclusion")
      */
-    private $premisseOf;
+    private $premiss;
 
     /**
      * Constructor
      */
     public function __construct()
     {
-        $this->premisseOf = new \Doctrine\Common\Collections\ArrayCollection();
+        $this->premiss = new \Doctrine\Common\Collections\ArrayCollection();
     }
     
 
@@ -92,29 +105,6 @@ class Regle
     }
 
     /**
-     * Set verbe
-     *
-     * @param string $verbe
-     * @return Regle
-     */
-    public function setVerbe($verbe)
-    {
-        $this->verbe = $verbe;
-    
-        return $this;
-    }
-
-    /**
-     * Get verbe
-     *
-     * @return string 
-     */
-    public function getVerbe()
-    {
-        return $this->verbe;
-    }
-
-    /**
      * Set negative
      *
      * @param boolean $negative
@@ -138,35 +128,58 @@ class Regle
     }
 
     /**
-     * Add premisseOf
+     * Set verbe
      *
-     * @param \IntelligenceArtificielle\Entity\Regle $premisseOf
+     * @param string $verbe
      * @return Regle
      */
-    public function addPremisseOf(\IntelligenceArtificielle\Entity\Regle $premisseOf)
+    public function setVerbe($verbe)
     {
-        $this->premisseOf[] = $premisseOf;
+        $this->verbe = $verbe;
     
         return $this;
     }
 
     /**
-     * Remove premisseOf
+     * Get verbe
      *
-     * @param \IntelligenceArtificielle\Entity\Regle $premisseOf
+     * @return string 
      */
-    public function removePremisseOf(\IntelligenceArtificielle\Entity\Regle $premisseOf)
+    public function getVerbe()
     {
-        $this->premisseOf->removeElement($premisseOf);
+        return $this->verbe;
     }
 
     /**
-     * Get premisseOf
+     * Add premiss
+     *
+     * @param \IntelligenceArtificielle\Entity\Regle $premiss
+     * @return Regle
+     */
+    public function addPremis(\IntelligenceArtificielle\Entity\Regle $premiss)
+    {
+        $this->premiss[] = $premiss;
+    
+        return $this;
+    }
+
+    /**
+     * Remove premiss
+     *
+     * @param \IntelligenceArtificielle\Entity\Regle $premiss
+     */
+    public function removePremis(\IntelligenceArtificielle\Entity\Regle $premiss)
+    {
+        $this->premiss->removeElement($premiss);
+    }
+
+    /**
+     * Get premiss
      *
      * @return \Doctrine\Common\Collections\Collection 
      */
-    public function getPremisseOf()
+    public function getPremiss()
     {
-        return $this->premisseOf;
+        return $this->premiss;
     }
 }
