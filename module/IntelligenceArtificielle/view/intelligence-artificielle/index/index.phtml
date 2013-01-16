@@ -1,5 +1,15 @@
 <pre>
 	<?php // print_r($store) ?>
-	<?php print_r($baseDeRegle) ?>
-	
+	<?php // print_r($baseDeRegle) ?>
 </pre>
+
+<?php
+$form->setAttribute('action', $this->url('ia', array('controller'=>'index', 'action'=>'index')));
+$form->prepare();
+
+echo $this->form()->openTag($form);
+echo $this->formHidden($form->get('questionKey'));
+echo $this->formSubmit($form->get('yes'));
+echo $this->formSubmit($form->get('no'));
+echo $this->form()->closeTag();
+?>
