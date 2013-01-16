@@ -11,6 +11,9 @@
 namespace IntelligenceArtificielle;
 
 return array(
+	'session' => array(
+		'save_path' => realpath(__DIR__ . '/../../../data/session'),
+	),
 	'router' => array(
 		'routes' => array(
 			'home' => array(
