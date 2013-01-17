@@ -1,15 +1,71 @@
-<pre>
-	<?php // print_r($store) ?>
-	<?php // print_r($baseDeRegle) ?>
-</pre>
+<style type="text/css">
+	.btn {
+		margin: 5px;
+	}
+	.container {
+		margin-left: 5%;
+	}
+	label {
+		display: inline-block;
+		margin-left: 20px;
+	}
+</style>
+<script type="text/javascript">
+	function showAnswers(checked){
+		if(checked.checked){
+			document.getElementById('ans').style.display = 'block';
+		}else{
+			document.getElementById('ans').style.display = 'none';
+		}
+	}
+	
+</script>
+<blockquote>
+	<p><?php echo $question ?></p>
+</blockquote>
 
 <?php
-$form->setAttribute('action', $this->url('ia', array('controller'=>'index', 'action'=>'index')));
+$form->setAttribute('action', $this->url('ia', array('controller' => 'index', 'action' => 'index')));
 $form->prepare();
 
 echo $this->form()->openTag($form);
+
 echo $this->formHidden($form->get('questionKey'));
 echo $this->formSubmit($form->get('yes'));
 echo $this->formSubmit($form->get('no'));
+echo $this->formSubmit($form->get('reset'));
+echo $this->formRow($form->get('show'));
 echo $this->form()->closeTag();
 ?>
+
+<blockquote id="ans" style="">
+	<?php
+	if (is_array($ans)) {
+		foreach ($ans as $proposition => $repond) {
+			$arrayProposition = preg_split('/\|/', $proposition);
+
+			if ($repond) {
+				$string = '<p class="text-success">' . 'Animal ' . $arrayProposition[0] . ' ' . $arrayProposition[1];
+			} else {
+				$string = '<p class="muted">' . 'Animal n_' . $arrayProposition[0] . ' pas ' . $arrayProposition[1];
+				if (strlen($arrayProposition[0]) == 0) {
+					$string = '<p class="muted">' . 'Animla ne ' . $arrayProposition[1] . ' pas ';
+				}
+			}
+
+			if (isset($arrayProposition[0][0]) && isset($arrayProposition[1][0])) {
+				$tmp = $arrayProposition[0] . $arrayProposition[1];
+				
+				if (in_array(strtolower($tmp[0]), array('a', 'e', 'i', 'o', 'u', 'y',))) {
+					$string = preg_replace('/_/', '\'', $string);
+				} else {
+					$string = preg_replace('/_/', 'e ', $string);
+				}
+			}
+			echo $string . '</p>';
+		}
+	}
+	?>
+</blockquote>
+
+<?php // var_dump($ans) ?>

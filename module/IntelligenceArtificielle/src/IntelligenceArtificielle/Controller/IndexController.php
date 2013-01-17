@@ -20,40 +20,238 @@ class IndexController extends AbstractActionController {
 
 	private $currentDemandablesProposition = array();
 	private $sessionKey = 'answers';
+	private $currentTestingTerminal;
+	private $isTerminated = FALSE;
+	private $showAnswer;
 
 	public function indexAction() {
 		$baseDeRegle = $this->getArrayOfRegles();
-		$demandablesPropositions = $this->getAllDemandablePropositions($baseDeRegle);
 		$propositionToConclution = $this->getPropositionToConclution($baseDeRegle);
 		$terminalesPropositions = $this->getAllFaitTerminal($propositionToConclution);
+		$allDemandablesProposition = $this->getAllDemandablePropositionsForEachTerminalsPropositions($terminalesPropositions, $baseDeRegle);
 
-		$allDemandablesProposition = array();
-		foreach ($terminalesPropositions as $key => $value) {
-			$this->currentDemandablesProposition = array();
-			$this->getAllDemandablesPremisses($value, $demandablesPropositions, $baseDeRegle);
-			$allDemandablesProposition[$this->getKeyUniqueForArray($value)] = $this->currentDemandablesProposition;
-		}
+//		echo '<pre>';
+//		print_r($allDemandablesProposition);
+//		echo '</pre>';
 
 		$request = $this->getRequest();
 		if ($request->isPost()) {
-			$this->handleAnswer($request->getPost());
+			$post = $request->getPost();
+			if ($post->show == 'hide') {
+				$this->showAnswer = FALSE;
+			} else if ($post->show == 'show') {
+				$this->showAnswer = TRUE;
+			}
+
+			$this->handleAnswer($post);
 		}
-		
+
+		$nextQuestionKey = $this->getNextQuestionKey($this->getAnswers(), $allDemandablesProposition, $propositionToConclution, $terminalesPropositions);
+
+		$questionString = '';
+		if ($nextQuestionKey === TRUE) {
+			$arrayTerminalProposition = preg_split('/\|/', $this->currentTestingTerminal);
+			$this->isTerminated = TRUE;
+			$questionString = 'Votre animal ' . $arrayTerminalProposition[1] . ' <b>' . $arrayTerminalProposition[2] . '</b>';
+		} else if (FALSE === $nextQuestionKey) {
+			$this->isTerminated = TRUE;
+			$questionString = 'Ce système n\'a pas votre animal';
+		} else if (NULL !== $nextQuestionKey) {
+			$questionString = $this->getQuestionStringForUser($nextQuestionKey);
+		}
+
 		$form = new \IntelligenceArtificielle\Form\QuestionForm();
-		$form->get('questionKey')->setValue("Question Key");
+		$form->get('questionKey')->setValue($nextQuestionKey);
+		$form->get('show')->setValue($this->showAnswer);
+
+		if ($this->isTerminated === TRUE) {
+			$form->get('yes')->setAttribute('disabled', TRUE);
+			$form->get('no')->setAttribute('disabled', TRUE);
+		}
 
 		return new ViewModel(array(
 					'baseDeRegle' => $baseDeRegle,
 					'store' => $propositionToConclution,
 					'form' => $form,
+					'question' => $questionString,
+					'ans' => $this->getAnswers(),
+					'showed' => $this->showAnswer,
 				));
 	}
-	
-	private function handleAnswer($data){
+
+	private function getQuestionStringForUser($querstionKey) {
+		if ($querstionKey) {
+			$premiss = preg_split('/\|/', $querstionKey);
+			return 'Animal ' . $premiss[0] . ' ' . $premiss[1] . '?';
+		}
+		return '';
+	}
+
+	private function getAllDemandablePropositionsForEachTerminalsPropositions($terminalesPropositions, $baseDeRegle) {
+		$allDemandablesProposition = array();
+		foreach ($terminalesPropositions as $value) {
+			$this->currentDemandablesProposition = array();
+			$this->getAllDemandablesPremisses($value, $this->getAllDemandablePropositions($baseDeRegle), $baseDeRegle);
+			$allDemandablesProposition[$this->getKeyUniqueForArray($value)] = $this->currentDemandablesProposition;
+		}
+		return $allDemandablesProposition;
+	}
+
+	private function addTestedTerminalProposition($key) {
+		$session = $this->getSession();
+		if (!is_array($session->testedTerminalProposition)) {
+			$session->testedTerminalProposition = array();
+		}
+		$session->testedTerminalProposition = array_merge($session->testedTerminalProposition, array($key => $key));
+	}
+
+	private function getTestedTerminalPropositions() {
+		$session = $this->getSession();
+		return $session->testedTerminalProposition;
+	}
+
+	private function getTerminalKeyForTesting($demandablesProposition, $terminalesPropositions) {
+		if (is_array($this->getTestedTerminalPropositions())) {
+			foreach ($this->getTestedTerminalPropositions() as $propositionKey) {
+				unset($demandablesProposition[$propositionKey]);
+				if (empty($demandablesProposition))
+					return NULL;
+			}
+		}
+
+		$break = array(
+			'deductive' => FALSE,
+			'terminal' => FALSE,
+			'premisses' => FALSE,
+		);
+
+		$succedDeductive = array();
+		
+		foreach ($demandablesProposition as $terminalKey => $eachTerminalProposition) {
+			$break['terminal'] = FALSE;
+			$propossitionMatchedForATerminalCounter = 0;
+			$nbDeductiveForAterminal = count($eachTerminalProposition);
+			$nextTerminal = FALSE;
+			foreach ($succedDeductive as $key) {
+				if(!isset($eachTerminalProposition[$key])){
+					$this->addTestedTerminalProposition($terminalKey);
+					unset($demandablesProposition[$terminalKey]);
+					$nextTerminal = TRUE;
+					break;
+				}
+			}
+			if($nextTerminal){
+				continue;
+			}
+			
+			foreach ($eachTerminalProposition as $deductiveKey => $deductiveProposition) {
+				$break['deductive'] = FALSE;
+				$nbDeductivePossible = count($deductiveProposition['OR']);
+				$deductiveNotMatchedCounter = 0;
+				$notMatchedTerminal = FALSE;
+				foreach ($deductiveProposition['OR'] as $premisses) {
+					$break['premisses'] = FALSE;
+					$matchedCounter = 0;
+					$nbPremisses = count($premisses);
+					foreach ($premisses as $premisskey => $premiss) {
+						$currentPropostionKey = substr($premisskey, 2);
+						$ans = $this->getAnswers();
+						if (isset($ans[$currentPropostionKey])) {
+							$this->currentTestingTerminal = $terminalKey;
+							$ansForcurrenProposition = $ans[$currentPropostionKey];
+							$currentPropostionStatusMatched = FALSE;
+
+							if ($ansForcurrenProposition) {
+								$negative = 1;
+							} else {
+								$negative = 0;
+							}
+
+							if ($premiss['negative'] != $negative) {
+								$currentPropostionStatusMatched = TRUE;
+							} else {
+								$currentPropostionStatusMatched = FALSE;
+							}
+
+							if (!$currentPropostionStatusMatched) {
+								$deductiveNotMatchedCounter++;
+								break;
+							}
+							if ($currentPropostionStatusMatched) {
+								$matchedCounter++;
+							}
+
+							if ($nbPremisses == $matchedCounter) {
+								$break['premisses'] = TRUE;
+								$succedDeductive[$deductiveKey] = $deductiveKey;
+								$propossitionMatchedForATerminalCounter++;
+								break;
+							}
+
+							if ($nbDeductivePossible == $deductiveNotMatchedCounter) {
+								$this->addTestedTerminalProposition($terminalKey);
+								$break['deductive'] = TRUE;
+							}
+						} else {
+							if (array_key_exists(($premisskey), $terminalesPropositions)) {
+								return NULL;
+							}
+							return $premisskey;
+						}
+					}
+					if ($break['premisses'])
+						break;
+				}
+				if ($deductiveNotMatchedCounter == $nbDeductivePossible) {
+					break;
+				}
+				if ($break['deductive'])
+					break;
+			}
+			if ($nbDeductiveForAterminal == $propossitionMatchedForATerminalCounter) {
+				return $eachTerminalProposition;
+			}
+			if ($break['terminal'])
+				break;
+		}
+		return NULL;
+	}
+
+	private function getNextQuestionKey($ans, $demandablesProposition, $propositionToConclution, $terminalesPropositions) {
+		$terminalKey = $this->getTerminalKeyForTesting($demandablesProposition, $terminalesPropositions);
+		if (is_array($terminalKey)) {
+			$this->getSession()->terminalReached = $terminalKey;
+			return TRUE;
+		}
+
+		return substr($terminalKey, 2);
+	}
+
+	private function selecteRandomKeyOfArray(Array $array = array()) {
+		$keys = array_keys($array);
+		$index = rand(0, count($keys) - 1);
+		return $keys[$index];
+	}
+
+	private function handleAnswer($data) {
 		$ans = $this->getAnswers();
-		$ans[] = $data;
-		$this->setAnswers($ans);
-		var_dump($ans);
+		$respond = NULL;
+		if (isset($data->yes)) {
+			$respond = TRUE;
+		} else if (isset($data->no)) {
+			$respond = FALSE;
+		}
+		$ans[$data->questionKey] = $respond;
+		if (isset($data->reset)) {
+			$this->resetAnswer();
+		} else {
+			$this->setAnswers($ans);
+		}
+	}
+
+	private function resetAnswer() {
+		$this->getSession()->ans = NULL;
+		$this->getSession()->testedTerminalProposition = NULL;
 	}
 
 	private function setAnswers($newAns) {
@@ -70,7 +268,9 @@ class IndexController extends AbstractActionController {
 		return array();
 	}
 
-	private function getSession() {
+	private function getSession($newKey = FALSE) {
+		if ($newKey)
+			return new Container($newKey);
 		return new Container($this->sessionKey);
 	}
 
@@ -128,24 +328,10 @@ class IndexController extends AbstractActionController {
 		return $demandablesPropositions;
 	}
 
-	private function getRandomNumber($start = 0, $end = 0) {
-		return rand($start, $end);
-	}
-
-	private function getAllQuestion($allDemandablesProposition) {
-		$questions = array();
-		foreach ($allDemandablesProposition as $aTerminal) {
-			foreach ($aTerminal as $premisses) {
-				$index = $this->getRandomNumber(0, (count($premisses['OR']) - 1));
-				foreach ($premisses['OR'][$index] as $eachDemandable) {
-					$questions[] = $this->getKeyUniqueForArray($eachDemandable);
-				}
-			}
+	private function getKeyUniqueForArray($premiss, $includeNegative = TRUE) {
+		if (!$includeNegative) {
+			return $premiss['verbe'] . '|' . $premiss['proposition'];
 		}
-		return $questions;
-	}
-
-	private function getKeyUniqueForArray($premiss) {
 		return $premiss['negative'] . '|' . $premiss['verbe'] . '|' . $premiss['proposition'];
 	}
 
@@ -171,7 +357,7 @@ class IndexController extends AbstractActionController {
 							}
 						}
 					}
-					$this->currentDemandablesProposition[$currentKey]['OR'][$tmpKey][] = $premiss;
+					$this->currentDemandablesProposition[$currentKey]['OR'][$tmpKey][$this->getKeyUniqueForArray($premiss)] = $premiss;
 				} else {
 					$this->getAllDemandablesPremisses($premiss, $demandablesPropositions, $baseDeRegle);
 				}
@@ -199,55 +385,6 @@ class IndexController extends AbstractActionController {
 	private function isDemandableProposition($goal = array(), $demandablesPropositions = array()) {
 		unset($goal['negative']);
 		return in_array($goal, $demandablesPropositions);
-	}
-
-	/**
-	 * 
-	 * @param array $premiss
-	 * @return \IntelligenceArtificielle\Entity\Regle
-	 */
-	private function getPremissEntityObject($premiss) {
-		$existEntity = $this->getEntityManager()->getRepository('IntelligenceArtificielle\Entity\Regle')->findOneBy(array(
-			'proposition' => $premiss['proposition'],
-			'negative' => $premiss['negative'],
-			'verbe' => $premiss['verbe'],
-				));
-		return $existEntity;
-	}
-
-	private function isPremissNotExist($premiss) {
-		$regle = $this->getPremissEntityObject($premiss);
-		return is_null($regle);
-	}
-
-	/**
-	 * 
-	 * @param array $premiss
-	 * @return \IntelligenceArtificielle\Entity\Regle
-	 */
-	private function newRegleEntity($premiss) {
-		$regleEntity = new Regle();
-		$regleEntity->setProposition(($premiss['proposition']));
-		$regleEntity->setVerbe(($premiss['verbe']));
-		$regleEntity->setNegative($premiss['negative']);
-		return $regleEntity;
-	}
-
-	private function addPremiss($premiss = array(), $conclusion = FALSE) {
-		if (FALSE !== $conclusion) {
-			$newConclutionEntity = $this->newRegleEntity($conclusion);
-			$this->flushRegleToDb($newConclutionEntity);
-
-			$newPremissEntity = $this->newRegleEntity($premiss);
-			$newPremissEntity->addPremis($this->getPremissEntityObject($conclusion));
-			$this->flushRegleToDb($newPremissEntity);
-			die();
-		}
-	}
-
-	private function flushRegleToDb($entity) {
-		$this->getEntityManager()->persist($entity);
-		$this->getEntityManager()->flush();
 	}
 
 	private function getArrayOfRegles($pathToRegleText = FALSE) {
