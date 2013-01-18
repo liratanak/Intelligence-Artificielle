@@ -30,10 +30,6 @@ class IndexController extends AbstractActionController {
 		$terminalesPropositions = $this->getAllFaitTerminal($propositionToConclution);
 		$allDemandablesProposition = $this->getAllDemandablePropositionsForEachTerminalsPropositions($terminalesPropositions, $baseDeRegle);
 
-//		echo '<pre>';
-//		print_r($allDemandablesProposition);
-//		echo '</pre>';
-
 		$request = $this->getRequest();
 		if ($request->isPost()) {
 			$post = $request->getPost();
@@ -126,24 +122,25 @@ class IndexController extends AbstractActionController {
 		);
 
 		$succedDeductive = array();
-		
+
 		foreach ($demandablesProposition as $terminalKey => $eachTerminalProposition) {
 			$break['terminal'] = FALSE;
 			$propossitionMatchedForATerminalCounter = 0;
 			$nbDeductiveForAterminal = count($eachTerminalProposition);
 			$nextTerminal = FALSE;
+
 			foreach ($succedDeductive as $key) {
-				if(!isset($eachTerminalProposition[$key])){
+				if (!isset($eachTerminalProposition[$key])) {
 					$this->addTestedTerminalProposition($terminalKey);
 					unset($demandablesProposition[$terminalKey]);
 					$nextTerminal = TRUE;
 					break;
 				}
 			}
-			if($nextTerminal){
+			if ($nextTerminal) {
 				continue;
 			}
-			
+
 			foreach ($eachTerminalProposition as $deductiveKey => $deductiveProposition) {
 				$break['deductive'] = FALSE;
 				$nbDeductivePossible = count($deductiveProposition['OR']);
@@ -171,6 +168,10 @@ class IndexController extends AbstractActionController {
 								$currentPropostionStatusMatched = TRUE;
 							} else {
 								$currentPropostionStatusMatched = FALSE;
+							}
+
+							if ($deductiveKey[0] == 1) {
+								$currentPropostionStatusMatched = !$currentPropostionStatusMatched;
 							}
 
 							if (!$currentPropostionStatusMatched) {
